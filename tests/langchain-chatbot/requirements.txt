@@ -1,0 +1,5 @@
+langchain
+langchain-openai
+numpy
+pandas
+requests
