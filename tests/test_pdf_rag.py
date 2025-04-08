@@ -9,7 +9,7 @@ from langchain.chat_models import init_chat_model
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition, create_react_agent
 
 vector_store = None
 llm = None
@@ -130,6 +130,12 @@ if __name__ == "__main__":
         .compile(checkpointer=memory)
     )
 
+    agent = create_react_agent(llm, 
+        [load_pdf_into_vector, clear_pdf_vector_store, query_pdf_with_vector],
+        checkpointer=memory)
+
+    mode = input("👉 Choose mode ('agent' or 'graph'): ").strip().lower()
+
     print("🤖 LangGraph PDF Chatbot")
     print("Say something like:")
     print(" - 'Load this PDF: https://example.com/doc.pdf'")
@@ -137,13 +143,36 @@ if __name__ == "__main__":
     print(" - 'Clear everything'")
     print(" - Type 'exit' to quit.\n")
 
+    def print_msg(msg):
+        if isinstance(msg, tuple):
+            print(msg)
+        elif isinstance(msg, AIMessage):
+            print(f"\n🤖 Bot: {msg.content}\n")
+        else:
+            msg.pretty_print()
+
     while True:
         user_input = input("You: ").strip()
         if user_input.lower() in ["exit", "quit"]:
             print("👋 Bye!")
             break
 
-        result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
-        msg = result["messages"][-1]
-        if isinstance(msg, AIMessage):
-            print(f"\n🤖 Bot: {msg.content}\n")
+        if mode == "agent":
+            for step in agent.stream(
+                {"messages": [HumanMessage(content=user_input)]}, 
+                stream_mode="values",
+                config=config
+            ):
+                print_msg(step["messages"][-1])
+        else:
+            for step in graph.stream(
+                {"messages": [HumanMessage(content=user_input)]}, 
+                stream_mode="values",
+                config=config
+            ):
+                print_msg(step["messages"][-1])
+
+        # result = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
+        # msg = result["messages"][-1]
+        # if isinstance(msg, AIMessage):
+        #     print(f"\n🤖 Bot: {msg.content}\n")
